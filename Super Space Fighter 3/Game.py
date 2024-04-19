@@ -21,6 +21,7 @@ class gameClass:
         self.FramesSinceStart = 0
         
         self.mode7 = Mode7(self, "Mode7/textures/grass2.png", "Mode7/textures/ceil_2.png", 0, 50)
+        #self.mode7 = Mode7(self, "Mode7/textures/trudy.png", "Mode7/textures/trudy.png", 0, 200)
 
         self.mode7.speed = 0.01
         
@@ -53,9 +54,13 @@ class gameClass:
             5: 2900,
         }
         
-        pygame.mixer.music.load("music\Juhani Junkala [Retro Game Music Pack] Title Screen.wav"),
-        pygame.mixer.music.play(-1)
-        pygame.mixer.music.set_volume(0.2)
+        self.volume = 0.2
+        self.musicPlaying = True
+        pygame.mixer.music.load("music\Juhani Junkala [Retro Game Music Pack] Title Screen.wav")
+        pygame.mixer.music.set_volume(self.volume)
+        if self.musicPlaying:
+            pygame.mixer.music.play(-1)
+        
         
     def handleEvents(self):
         for event in pygame.event.get():
@@ -81,6 +86,17 @@ class gameClass:
                 self.level = 4
             elif self.keys[pygame.K_5]:
                 self.level = 5
+            
+        # music controls
+        if self.keys[pygame.K_MINUS]:
+            self.volume = min(max(self.volume-0.01, 0), 1)
+        elif self.keys[pygame.K_PLUS]:
+            self.volume = min(max(self.volume+0.01, 0), 1)
+        elif self.keys[pygame.K_m]:
+                self.musicPlaying = False
+        elif self.keys[pygame.K_n]:
+            self.musicPlaying = True
+                
             
                 
                 
@@ -108,7 +124,9 @@ class gameClass:
                 pygame.mixer.music.load("music\Juhani Junkala [Retro Game Music Pack] Level 1.wav")
             elif self.level == 5:
                 pygame.mixer.music.load("music\Juhani Junkala [Retro Game Music Pack] Level 2.wav")
-            pygame.mixer.music.play(-1)
+            pygame.mixer.music.set_volume(self.volume)
+            if self.musicPlaying:
+                pygame.mixer.music.play(-1)
         elif self.state == 2 and self.FramesSinceStart < 60:
             self.mode7.angle = 3.141592654 * (self.FramesSinceStart/59)
             

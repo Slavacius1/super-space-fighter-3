@@ -1,5 +1,6 @@
 import pygame
 from random import randint
+from explosionRenderer import Explosion
 
 def getVelocityToAPoint(posA: list, posB: list, speed: float)->list:
     """posA is the target object. posB is the subject thats moving towards the target. This function guarantees a constant speed while allowing for movement in any direction"""
@@ -79,6 +80,36 @@ class EnemyList:
     
     def returnPosforIndex(self, index):
         return self.list[index].pos
+
+class ExplosionList:
+    def __init__(self):
+        self.list: list[Explosion] = []
+
+    
+    def createExplosion(self, pos: list, size: int):
+        self.list.append(Explosion(pos, size))
+        
+    def update(self):
+        
+        self.triggerList = [] # when iterating over each object, if a trigger is collected then it is kept here
+        
+        i = len(self.list) - 1
+        while i >= 0:
+            self.list[i].update()
+            
+             
+            if self.list[i].state == 0: # culls dead objects
+                self.list.pop(i)
+                i -= 1
+            i -= 1
+        
+    def killAll(self):
+        for i in range(len(self.list)):
+            self.list[i].state = 0     
+            
+    def render(self, surf: pygame.Surface):
+        for i in range(len(self.list)):
+            self.list[i].render(surf)
 
 class Missile:
     def __init__(self, playableArea: pygame.Rect, playerPos, initialPos: list[int] = [0,0], baseSpeed: int = 5):
@@ -407,7 +438,10 @@ class Fly:
         self.state = 1 #active
         
         self.FramesSinceStart = 0
-        self.pA_RPoLW = [self.playableArea.left - 100, randint(self.playableArea.top, self.playableArea.bottom)] # Playable Area - Random Point on the Left Wall
+        self.pA_RPoLW = [self.playableArea.left - 100, randint(self.playableArea.top, self.playableArea.bottom)] # Playable Area - Random Point on the Left Wall0
+        
+        #spawns explosion
+        self.explosion = Explosion(self.pos, 2)
         
     def update(self, listOfSprites: list):
         self.pos[0] += self.vel[0]
@@ -421,6 +455,7 @@ class Fly:
         if self.pos[1] > self.playableArea.bottom + 2*self.height:
             self.state = 0 #dead
 
+        self.explosion.update()
         self.FramesSinceStart += 1
         
         return 0
@@ -431,6 +466,8 @@ class Fly:
             surf.blit(self.image1, self.pos)
         else:
             surf.blit(self.image2, self.pos)
+            
+        self.explosion.render(surf=surf)
 
 class FlyProjectile(Fly):
     """Similar to the Fly except its initial pos and vel are given directly instead of randomly generated.
@@ -682,18 +719,30 @@ class SplittingBall:
 
 class Boss(pygame.sprite.Sprite):
     def __init__(self, playableArea: pygame.Rect):
-        self.image = pygame.Surface((64,64))
-        self.image.fill(0xff0000)
+        self.verticalDirection = "down"
+        self.horizontalDirection = "left"
+        self.image1 = pygame.transform.scale(pygame.image.load("graphics/boss1.png"),(64,64)).convert()
+        self.image1.set_colorkey((0,0,0))
+        self.image = self.image1
         self.width = self.image.get_width()
         self.height = self.image.get_height()
         self.playableArea = playableArea
+        
+        self.updateImage()
+        
+        self.explosionList: list[Explosion] = []
+        
+        self.explosionSound = pygame.mixer.Sound("sound/sfx_exp_short_hard16.wav")
+        self.explosionSound.set_volume(0.4)
+        
+        self.deathSound = pygame.mixer.Sound("sound/sfx_sound_mechanicalnoise2.wav")
+        self.deathSound.set_volume(0.4)
         
         self.pos = [playableArea.right - 100,200]
         self.newPos = [randint(self.playableArea.left + 10,self.playableArea.right - 10 - self.width), randint(self.playableArea.top + 10,self.playableArea.bottom - 10 -self.height)]
         self.vel = [0,0]
         self.baseSpeed = 5
-        self.verticalDirection = "down"
-        self.horizontalDirection = "left"
+        
         self.triggeredFinalPush = False
         self.firstFrameofFight = True
         self.randomFrameCounter = randint(60,240)
@@ -721,10 +770,26 @@ class Boss(pygame.sprite.Sprite):
         
         self.FramesSinceStart = 0
         
+    def updateImage(self):
+        
+            
+        if self.verticalDirection == "up":
+            self.image = pygame.transform.rotate(self.image1, 90)
+        elif self.verticalDirection == "down":
+            self.image = pygame.transform.rotate(self.image1, 270)
+        else:
+            self.image = self.image1
+            
+        if self.horizontalDirection == "left":
+            self.image = pygame.transform.flip(self.image1, True, False)
+        else:
+            self.image = self.image1
+        
     def update(self, playerPos: list[int], bossType):
         """bossType should be the game level because there is one boss which changes behaviour based on 'bossType'"""
+        
         self.bossType = bossType
-        if self.active:
+        if self.active and self.FramesSinceStart > 120:
             if bossType == 1:
                 # moves up and down at the right side of the screen
 
@@ -748,10 +813,27 @@ class Boss(pygame.sprite.Sprite):
                 if self.FramesSinceStart % 120 == 119:
                     self.pos = self.newPos
                     
+                #image 
+                self.verticalDirection = "none"
+                if self.FramesSinceStart % 6 >= 3 and self.FramesSinceStart % 120 > 90:
+                    if self.newPos[0] < self.playableArea.width*0.5: 
+                        self.horizontalDirection = "right"
+                    else:
+                        self.horizontalDirection = "left"
+                else:
+                    if self.pos[0] < self.playableArea.width*0.5: 
+                        self.horizontalDirection = "right"
+                    else:
+                        self.horizontalDirection = "left"
+                
+                
+                    
             elif bossType == 3:
                 # moves left and right periodically
                 self.baseSpeed = 8
                 
+                if self.FramesSinceStart == 120:
+                    self.pos = [self.playableArea.right - 10 - self.width, self.playableArea.centery]
                 
                 if self.randomFrameCounter <= 0:
                     self.randomFrameCounter = randint(60,240)
@@ -762,6 +844,10 @@ class Boss(pygame.sprite.Sprite):
                         self.newPos = [self.playableArea.right - 10 - self.width, self.pos[1]]
 
                 if self.bossPhase == 0:
+                    if self.pos[0] < self.playableArea.width*0.5: 
+                        self.horizontalDirection = "right"
+                    else:
+                        self.horizontalDirection = "left"
 
                     if self.verticalDirection == "down":
                         self.pos[1] += self.baseSpeed
@@ -777,12 +863,14 @@ class Boss(pygame.sprite.Sprite):
                     self.randomFrameCounter -= 1
                 
                 else:
-                    
+                    self.verticalDirection = "none"
                     if abs(self.pos[0] - self.newPos[0]) > 20:
                         if self.pos[0] > self.newPos[0]:
                             self.pos[0] -= self.baseSpeed * 2
+                            self.horizontalDirection = "left"
                         else:
                             self.pos[0] += self.baseSpeed * 2
+                            self.horizontalDirection = "right"
                     else:
                         self.bossPhase = 0
                         
@@ -798,6 +886,7 @@ class Boss(pygame.sprite.Sprite):
                     
                 if self.bossPhase == 0: # Stays near the top and fires projectiles left/right/down
                     
+                    self.verticalDirection = "none"
                     
                     self.vel = [0,0]
                     self.baseSpeed = 2 / (self.hp/self.maxHp)
@@ -832,20 +921,23 @@ class Boss(pygame.sprite.Sprite):
                             self.pos = self.newPos
                             self.bossPhase = 0
                             self.invulnerable = True
-                            self.FramesSinceStart = 0
-                            self.randomFrameCounter = randint(240,600)
+                            self.randomFrameCounter += randint(240,600)
                         elif self.FramesSinceStart == self.randomFrameCounter:
                             self.newPos = [randint(10,self.playableArea.right -10 - self.width),self.playableArea.top]
                     else:
                         self.bossPhase = 1
                         self.invulnerable = False
-                        self.randomFrameCounter = randint(300,600)
-                        self.FramesSinceStart = 0
-                    
-                    
-                
+                        self.randomFrameCounter += randint(300,600)
+      
        
-
+        self.updateImage()
+        i = len(self.explosionList) - 1
+        while i >= 0:
+            self.explosionList[i].update()
+            if self.explosionList[i].state == 0:
+                self.explosionList.pop(i)
+                i -= 1
+            i -= 1
         self.FramesSinceStart += 1
         
     def render(self, surf: pygame.Surface):
@@ -869,6 +961,12 @@ class Boss(pygame.sprite.Sprite):
                 
             
                 surf.blit(self.image, self.pos)
+                
+        for i in range(len(self.explosionList)):
+            self.explosionList[i].render(surf=surf)
+            
+                
+        
         
         
     def renderStats(self, surf: pygame.Surface):
@@ -887,6 +985,7 @@ class Boss(pygame.sprite.Sprite):
             
         label = self.myFont.render("Boss", True, 0xffffff)
         surf.blit(label, (self.playableArea.right - 310,0))
+        
     
         
     def getCentrePos(self)->list:
@@ -894,6 +993,7 @@ class Boss(pygame.sprite.Sprite):
     
     def returnDeathState(self):
         if self.hp == 0:
+            self.deathSound.play()
             return True
         else:
             return False
@@ -912,6 +1012,8 @@ class Boss(pygame.sprite.Sprite):
                     if targetMask.overlap_area(self.mask, [offsetX, offsetY]) != 0:
                         self.hp -= 1
                         self.immunityTime = 30
+                        self.explosionList.append(Explosion(targetPos, 1))
+                        self.explosionSound.play()
                         break
             else:
                 self.immunityTime -= 1
@@ -964,13 +1066,28 @@ class PowerupList:
 class PowerUp:
     def __init__(self, playableArea: pygame.Rect, initialPos: list[int] = [0,0], baseSpeed: int = 2, powerupType: int = 1):
         """fall from the ceiling"""
-        self.image1 = pygame.transform.scale(pygame.image.load("graphics/powerup1.png").convert(), (48,48))
+        self.image1 = pygame.transform.scale(pygame.image.load("graphics/powerup1.png").convert(), (48,39))
         self.image1.set_colorkey((0,0,0))
-        self.image = self.image1
+        #self.image2 = pygame.transform.scale(pygame.image.load("graphics/powerup2.png").convert(), (42,42)) default powerup so not included
+        #self.image2.set_colorkey((0,0,0))
+        self.image3 = pygame.transform.scale(pygame.image.load("graphics/powerup3.png").convert(), (42,42))
+        self.image3.set_colorkey((0,0,0))
+        self.image4 = pygame.transform.scale(pygame.image.load("graphics/powerup4.png").convert(), (42,42))
+        self.image4.set_colorkey((0,0,0))
+        self.image5 = pygame.transform.scale(pygame.image.load("graphics/powerup5.png").convert(), (42,42))
+        self.image5.set_colorkey((0,0,0))
+        self.powerupTypeToImageDict = {
+            1: self.image1,
+            2: self.image3,
+            3: self.image4,
+            4: self.image5,
+        }
+        self.image = self.powerupTypeToImageDict[powerupType]
         self.pickupSound = pygame.mixer.Sound("sound/sfx_sounds_fanfare1.wav")
         self.pickupSound.set_volume(0.5)
         self.deathSound = pygame.mixer.Sound("sound/sfx_sounds_damage1.wav")
         self.deathSound.set_volume(0.5)
+        
 
         self.pos = initialPos.copy()
         self.baseSpeed = baseSpeed
@@ -1029,4 +1146,4 @@ class PowerUp:
         
         
     def render(self, surf: pygame.Surface):
-        surf.blit(self.image1, self.pos)
+        surf.blit(self.image, self.pos)

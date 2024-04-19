@@ -1,6 +1,7 @@
 
 import pygame
 from math import floor
+from random import randint
 
 import pygame.image
 
@@ -22,20 +23,24 @@ def loadBulletImage(path: str):
         
     return bulletTable
         
-        
+def generateRandomColour():
+    return pygame.color.Color(randint(128,255),randint(128,255),randint(128,255))
 
 
 class PlayerBulletList:
     def __init__(self):
         self.list = []
         
-    def update(self, listOfSprites, boss):
+    def update(self, listOfSprites: list, boss, bossActive: bool):
         """listOfSprites refers to the sprites to check against. if the bullet collides w/ a sprite then it dies"""
         i = len(self.list) - 1
         while i >= 0:
             self.list[i].update(listOfSprites)
-            self.list[i].doCollisionDetectionwithBoss(boss)
+            if bossActive:
+                self.list[i].doCollisionDetectionwithBoss(boss)
             i -= 1
+    
+    
             
         
     def deleteDeadBullets(self):
@@ -69,11 +74,12 @@ class PlayerBulletList:
         return self.list[index].pos
 
 class PlayerBullet(pygame.sprite.Sprite):
-    def __init__(self, initialPos: list, initialDir: int, playableArea: pygame.Rect):
+    def __init__(self, initialPos: list, initialDir: int, playableArea: pygame.Rect, bulletType: int):
         self.image1 = pygame.transform.scale(pygame.image.load("graphics/bullet1.png").convert(), (20,4))
         self.image1.set_colorkey((0,0,0))
         self.currentImage = self.image1
         
+
         
         
         self.bulletImageTable = loadBulletImage("graphics/bulletTable.png")
@@ -81,7 +87,8 @@ class PlayerBullet(pygame.sprite.Sprite):
         # red, green, yellow and blue
         # Columns are the different sizes 
         # in increasing order.
-        self.currentBulletTableRow = self.bulletImageTable[0] # red
+        self.currentBulletTableRow = self.bulletImageTable[bulletType] # red
+        self.bulletType = bulletType
         
         self.width = self.currentImage.get_width()
         self.height = self.currentImage.get_height()
@@ -112,9 +119,16 @@ class PlayerBullet(pygame.sprite.Sprite):
         self.width = self.currentImage.get_width()
         self.height = self.currentImage.get_height()
         
+        if self.dir == -1:
+            self.currentImage = pygame.transform.flip(self.currentImage, True, False)
+        
         # Kinematics
         self.pos[0] += self.velX
-        self.velX = max(min(self.velX + self.dir, 30),-30) # limits velocity to 30 frames/second
+        
+        if self.bulletType == 1:
+            self.velX = max(min(self.velX + 4 * self.dir, 60),-60) # limits velocity to 60 frames/second for hi speed bullets
+        else:
+            self.velX = max(min(self.velX + self.dir, 30),-30) # limits velocity to 30 frames/second
         
         # Culling offscreen bullets
         # Bullets wait a frame to die so enemies can detect collision
@@ -128,17 +142,18 @@ class PlayerBullet(pygame.sprite.Sprite):
             self.state = 1 #one frame left of life
         
         # Collision detection
-        self.mask = pygame.mask.from_surface(self.currentImage)
-        for i in range(listOfSprites.getLen()):
-            targetMask: pygame.mask.Mask = listOfSprites.returnMaskforIndex(i)
-            targetPos = listOfSprites.returnPosforIndex(i)
-            
-            offsetX = self.pos[0] - targetPos[0]
-            offsetY = self.pos[1] - targetPos[1]
-            
-            if targetMask.overlap_area(self.mask, [offsetX, offsetY]) != 0:
-                self.state = 1 #one frame left of life
-                break
+        if self.bulletType != 2:
+            self.mask = pygame.mask.from_surface(self.currentImage)
+            for i in range(listOfSprites.getLen()):
+                targetMask: pygame.mask.Mask = listOfSprites.returnMaskforIndex(i)
+                targetPos = listOfSprites.returnPosforIndex(i)
+                
+                offsetX = self.pos[0] - targetPos[0]
+                offsetY = self.pos[1] - targetPos[1]
+                
+                if targetMask.overlap_area(self.mask, [offsetX, offsetY]) != 0:
+                    self.state = 1 #one frame left of life
+                    break
         
         # frame counter  
         if self.state == 1:
@@ -187,10 +202,20 @@ class Player(pygame.sprite.Sprite):
         self.pos = [10,playableArea.height*0.5+playableArea.top]
         self.vel = [0,0]
         self.baseSpeed = 8
+        self.baseAcceleration = 2
         self.facingDirection = 1 # 1 for right, -1 for left
         self.hp = 8
         self.immunityTime = 0
         self.FramesSinceLastBullet = 0
+        self.bulletType = 0
+        self.randomColour = generateRandomColour()
+        self.bulletTypeDescriptionDict = {
+            0: ("standard", (255,0,0)),
+            1: ("hi speed", (0,255,0)),
+            2: ("piercing", (255,255,0)),
+            3: ("multi shot", self.randomColour),
+        }
+
         
         self.playableArea = playableArea
         
@@ -212,19 +237,37 @@ class Player(pygame.sprite.Sprite):
     
     def handleInputs(self):
         self.keys = pygame.key.get_pressed()
+        # if self.keys[pygame.K_w]:
+        #     self.vel[1] = -self.baseSpeed
+        # elif self.keys[pygame.K_s]:
+        #     self.vel[1] = self.baseSpeed
+        # else:
+        #     self.vel[1] = 0
+            
+        # if self.keys[pygame.K_a]:
+        #     self.vel[0] = -self.baseSpeed
+        # elif self.keys[pygame.K_d]:
+        #     self.vel[0] = self.baseSpeed
+        # else:
+        #     self.vel[0] = 0
+            
         if self.keys[pygame.K_w]:
-            self.vel[1] = -self.baseSpeed
+            self.vel[1] = min(max(self.vel[1]-self.baseAcceleration,-self.baseSpeed),self.baseSpeed)
         elif self.keys[pygame.K_s]:
-            self.vel[1] = self.baseSpeed
+            self.vel[1] = min(max(self.vel[1]+self.baseAcceleration,-self.baseSpeed),self.baseSpeed)
         else:
-            self.vel[1] = 0
+            self.vel[1] = min(max(self.vel[1]*0.5,-self.baseSpeed),self.baseSpeed)
+            if abs(self.vel[1]) <= 0.1:
+                self.vel[1] = 0
             
         if self.keys[pygame.K_a]:
-            self.vel[0] = -self.baseSpeed
+            self.vel[0] = min(max(self.vel[0]-self.baseAcceleration,-self.baseSpeed),self.baseSpeed)
         elif self.keys[pygame.K_d]:
-            self.vel[0] = self.baseSpeed
+            self.vel[0] = min(max(self.vel[0]+self.baseAcceleration,-self.baseSpeed),self.baseSpeed)
         else:
-            self.vel[0] = 0
+            self.vel[0] = min(max(self.vel[0]*0.5,-self.baseSpeed),self.baseSpeed)
+            if abs(self.vel[0]) <= 0.1:
+                self.vel[0] = 0
             
         if self.keys[pygame.K_RETURN]: #fire button
             if self.FramesSinceLastBullet > 16:
@@ -232,11 +275,33 @@ class Player(pygame.sprite.Sprite):
                 if self.facingDirection == 1:
                     self.posOfBulletSpawn = [self.pos[0] + self.width - 6,
                                             self.pos[1] + self.height*.5 - 10]
+                    
+                    #extra positions for multishot
+                    self.posOfBulletSpawn2 = [self.pos[0] + self.width - 12,
+                                            self.pos[1] + self.height*.5 - 34]
+                    self.posOfBulletSpawn3 = [self.pos[0] + self.width - 12,
+                                            self.pos[1] + self.height*.5 + 14]
                 else:
                     self.posOfBulletSpawn = [self.pos[0] - 10,
                                             self.pos[1] + self.height*.5 - 10]
-                self.bulletList.createBullet(PlayerBullet(self.posOfBulletSpawn, self.facingDirection, self.playableArea))
+                    
+                    #extra positions for multishot
+                    self.posOfBulletSpawn2 = [self.pos[0] - 4,
+                                            self.pos[1] + self.height*.5 - 34]
+                    self.posOfBulletSpawn3 = [self.pos[0] - 4,
+                                            self.pos[1] + self.height*.5 + 14]
+                if self.bulletType == 3:
+                    
+                    self.bulletList.createBullet(PlayerBullet(self.posOfBulletSpawn, self.facingDirection, self.playableArea, self.bulletType))
+                    self.bulletList.createBullet(PlayerBullet(self.posOfBulletSpawn2, self.facingDirection, self.playableArea, self.bulletType))
+                    self.bulletList.createBullet(PlayerBullet(self.posOfBulletSpawn3, self.facingDirection, self.playableArea, self.bulletType))
+                    
+                else:
+                    self.bulletList.createBullet(PlayerBullet(self.posOfBulletSpawn, self.facingDirection, self.playableArea, self.bulletType))
+                
                 self.FramesSinceLastBullet = 0
+                if self.bulletType == 1:
+                    self.FramesSinceLastBullet = 4
                 
         if self.keys[pygame.K_RSHIFT] and not self.RSHIFTDown: # flip button
             if self.facingDirection == -1:
@@ -271,8 +336,7 @@ class Player(pygame.sprite.Sprite):
             self.pos[1] -= self.vel[1]
             self.pos[1] = self.playableArea.bottom - self.height
             
-        self.FramesSinceStart += 1
-        self.FramesSinceLastBullet += 1
+        
         
         if self.immunityTime % 6 > 2:
             self.visible = False
@@ -283,6 +347,18 @@ class Player(pygame.sprite.Sprite):
             self.hp == 36
         if self.hp == 1 and self.FramesSinceStart % 60 == 1:
             self.lowhealthSound.play()
+            
+        # colour
+        self.randomColour = generateRandomColour()
+        self.bulletTypeDescriptionDict = {
+            0: ("standard", (255,0,0)),
+            1: ("hi speed", (0,255,0)),
+            2: ("piercing", (255,255,0)),
+            3: ("multi shot", self.randomColour),
+        }
+            
+        self.FramesSinceStart += 1
+        self.FramesSinceLastBullet += 1
         
     def render(self, surf: pygame.Surface):
         if self.visible:
@@ -304,6 +380,11 @@ class Player(pygame.sprite.Sprite):
         if self.hp == 1 and self.FramesSinceStart % 60 > 29:
             self.label = self.myFont.render("low health!", True, (255,0,0))
             surf.blit(self.label, (400,60))
+            
+        label = self.myFont.render("bullet type:", True, self.bulletTypeDescriptionDict[self.bulletType][1])
+        surf.blit(label, (640,0))
+        label = self.myFont.render(self.bulletTypeDescriptionDict[self.bulletType][0], True, self.bulletTypeDescriptionDict[self.bulletType][1])
+        surf.blit(label, (640,30))
         
         
         

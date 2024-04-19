@@ -1,7 +1,6 @@
 import Game
 import PlayerSprite
 import Enemies
-import pygame
 from random import randint
 
 game = Game.gameClass()
@@ -42,7 +41,7 @@ while game.state != 0:
         
         #update phase
         player.update()
-        playerBulletList.update(enemyList, boss)
+        playerBulletList.update(enemyList, boss, boss.active)
         game.update()
 
         #render phase
@@ -63,11 +62,18 @@ while game.state != 0:
         player.doCollisionDetectionwithEnemies(enemyList)
         game.update()
         enemyList.update(playerBulletList)
-        playerBulletList.update(enemyList, boss)
+        playerBulletList.update(enemyList, boss, boss.active)
         playerBulletList.deleteDeadBullets()
         powerupList.update(playerBulletList, player)
         if powerupList.powerupCollected == 1:
             player.hp += 2
+        elif powerupList.powerupCollected == 2:
+            player.bulletType = 1
+        elif powerupList.powerupCollected == 3:
+            player.bulletType = 2
+        elif powerupList.powerupCollected == 4:
+            player.bulletType = 3
+            
         
             
             
@@ -93,6 +99,8 @@ while game.state != 0:
                     enemyList.createEnemy(Enemies.Bat(game.playableArea, 1, game.pA_RPoLW)) 
             if game.FramesSinceStart == game.powerupTimer:
                 powerupList.createEnemy(Enemies.PowerUp(game.playableArea, [randint(0,game.playableArea.width), game.playableArea.top])) 
+            if game.FramesSinceStart == game.levelLengthsDict[2] - game.powerupTimer:
+                powerupList.createEnemy(Enemies.PowerUp(game.playableArea, [randint(0,game.playableArea.width), game.playableArea.top], powerupType=2)) 
                 
         elif game.level == 3:
             if game.FramesSinceStart % 30 == 12:
@@ -101,6 +109,8 @@ while game.state != 0:
                 powerupList.createEnemy(Enemies.PowerUp(game.playableArea, [randint(0,game.playableArea.width), game.playableArea.top])) 
             if game.FramesSinceStart == 0:
                 enemyList.createEnemy(Enemies.Lakitu(game.playableArea, [randint(0,game.playableArea.right),game.playableArea.top + 10]))
+            if game.FramesSinceStart == game.levelLengthsDict[3] - game.powerupTimer:
+                powerupList.createEnemy(Enemies.PowerUp(game.playableArea, [randint(0,game.playableArea.width), game.playableArea.top], powerupType=3)) 
                 
         elif game.level == 4:
             if game.FramesSinceStart < 1000:
@@ -115,12 +125,16 @@ while game.state != 0:
                     enemyList.createEnemy(Enemies.Missile(game.playableArea, player.getCentrePos(), list(game.playableArea.bottomright)))
             if game.FramesSinceStart == game.powerupTimer:
                 powerupList.createEnemy(Enemies.PowerUp(game.playableArea, [randint(0,game.playableArea.width), game.playableArea.top])) 
+            if game.FramesSinceStart == game.levelLengthsDict[4] - game.powerupTimer:
+                powerupList.createEnemy(Enemies.PowerUp(game.playableArea, [randint(0,game.playableArea.width), game.playableArea.top], powerupType=4)) 
                 
         elif game.level == 5:
             if game.FramesSinceStart % 90 == 29:
                 enemyList.createEnemy(Enemies.SplittingBall(game.playableArea, player.pos, 1, game.pA_RPoRW))
             if game.FramesSinceStart == game.powerupTimer:
                 powerupList.createEnemy(Enemies.PowerUp(game.playableArea, [randint(0,game.playableArea.width), game.playableArea.top])) 
+            if game.FramesSinceStart == game.levelLengthsDict[5] - game.powerupTimer:
+                powerupList.createEnemy(Enemies.PowerUp(game.playableArea, [randint(0,game.playableArea.width), game.playableArea.top], powerupType=randint(2,4))) 
                     
             
                     
@@ -166,11 +180,10 @@ while game.state != 0:
         enemyList.update(playerBulletList)
         game.update()
         player.doCollisionDetectionwithEnemies(enemyList)
-        if game.FramesSinceStart % 60 == 0:
-            playerBulletList.deleteDeadBullets()
+            
         if boss.invulnerable == False:
             boss.doCollisionDetectionwithBullets(playerBulletList)
-        playerBulletList.update(enemyList, boss)
+        playerBulletList.update(enemyList, boss, boss.active)
         
         if game.FramesSinceStart == 0: #syncs frame clocks
             boss.FramesSinceStart = 0
@@ -179,10 +192,13 @@ while game.state != 0:
             boss.active = True
             boss.visible = True
             enemyList.killAll()
+            
+        
         
         
         
         boss.update(player.getCentrePos(), game.level)
+        playerBulletList.deleteDeadBullets()
         
         # Spawning patterns
         if boss.active:
@@ -283,7 +299,7 @@ while game.state != 0:
         game.update()
         player.update()
         enemyList.update(playerBulletList)
-        playerBulletList.update(enemyList, boss)
+        playerBulletList.update(enemyList, boss, boss.active)
         playerBulletList.deleteDeadBullets()
         if game.FramesSinceStart == 0:
             boss.maxHp = boss.hpDict[game.level + 1]
